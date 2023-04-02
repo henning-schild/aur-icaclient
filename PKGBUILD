@@ -7,7 +7,7 @@
 
 pkgname=icaclient
 pkgver=23.3.0.32
-pkgrel=1
+pkgrel=2
 pkgdesc="Citrix Workspace App (a.k.a. ICAClient, Citrix Receiver)"
 arch=('x86_64' 'i686' 'armv7h')
 url='https://www.citrix.com/downloads/workspace-app/linux/workspace-app-for-linux-latest.html'
@@ -20,7 +20,7 @@ optdepends=('xerces-c: gtk2 configuration manager'
             'libc++: for HDXTeams')
 conflicts=('bin32-citrix-client' 'citrix-client')
 options=(!strip)
-backup=("opt/Citrix/ICAClient/config/appsrv.ini" "opt/Citrix/ICAClient/config/wfclient.ini" "opt/Citrix/ICAClient/config/module.ini")
+backup=("opt/Citrix/ICAClient/config/appsrv.ini" "opt/Citrix/ICAClient/config/wfclient.ini" "opt/Citrix/ICAClient/config/module.ini" "opt/Citrix/ICAClient/usb.conf")
 _dl_urls_="$(curl -sL "$url" | grep -F ".tar.gz?__gda__")"
 _dl_urls="$(echo "$_dl_urls_" | grep -F "$pkgver.tar.gz?__gda__")"
 _source32=https:"$(echo "$_dl_urls" | sed -En 's|^.*rel="(//.*/linuxx86-[^"]*)".*$|\1|p')"
@@ -31,7 +31,8 @@ source=('citrix-configmgr.desktop'
         'citrix-wfica.desktop'
         'citrix-workspace.desktop'
         'wfica.sh'
-        'wfica_assoc.sh')
+        'wfica_assoc.sh'
+        '65-icaclient.rules')
 source_x86_64=("$pkgname-x64-$pkgver.tar.gz::$_source64")
 source_i686=("$pkgname-x86-$pkgver.tar.gz::$_source32")
 source_armv7h=("$pkgname-armhf-$pkgver.tar.gz::$_sourcearmhf")
@@ -40,7 +41,8 @@ sha256sums=('643427b6e04fc47cd7d514af2c2349948d3b45f536c434ba8682dcb1d4314736'
             '1dc6d6592fa08c44fb6a4efa0dc238e9e78352bb799ef2e1a92358b390868064'
             'cdfb3a2ef3bf6b0dd9d17c7a279735db23bc54420f34bfd43606830557a922fe'
             'fe0b92bb9bfa32010fe304da5427d9ca106e968bad0e62a5a569e3323a57443f'
-            'a3bd74aaf19123cc550cde71b5870d7dacf9883b7e7a85c90e03b508426c16c4')
+            'a3bd74aaf19123cc550cde71b5870d7dacf9883b7e7a85c90e03b508426c16c4'
+            'f9d52a4b41946799f6910c8faad91e51a1a69cd34e8f9b37a41cb4fd93432e64')
 sha256sums_x86_64=('7e6e6aed5c3c0fd367ae218448668afc9b0a0d7d9d11b7b799d02552f7acdd12')
 sha256sums_i686=('0a75a3d33fd1ade040b6fb915f635a2dc3429502396336c3e5aed997273f0d53')
 sha256sums_armv7h=('a28994fdf9db5633907ec1647142396443d68b20bb414915c23f49b87a41955d')
@@ -72,7 +74,15 @@ package() {
             PrimaryAuthManager ServiceRecord selfservice UtilDaemon wfica
 
     # copy directories
-    cp -rt "${pkgdir}$ICAROOT" config gtk help icons keyboard keystore lib nls site usb util
+    cp -rt "${pkgdir}$ICAROOT" config gtk help icons keyboard keystore lib nls site util
+
+    # deal with usb
+    cp -t "${pkgdir}$ICAROOT" usb/*
+    rm "${pkgdir}$ICAROOT/ica-usb.rules"
+
+    # deploy our own udev rules
+    install -m755 -D "${srcdir}/65-${pkgname}.rules" "${pkgdir}"/usr/lib/udev/rules.d/65-"${pkgname}".rules
+
     # fix permissions
     chmod -R a+r "${pkgdir}$ICAROOT"
 
@@ -106,6 +116,12 @@ package() {
         -e 's/Ceip=Enable/Ceip=Disable/' \
         -e 's/DisableHeartBeat=False/DisableHeartBeat=True/' \
         "${pkgdir}$ICAROOT/config/module.ini"
+    # inspired by debian usb support package postinst
+    sed -i -e 's/^[ \t]*VirtualDriver[ \t]*=.*$/&, GenericUSB/' "${pkgdir}$ICAROOT/config/module.ini"
+    sed -i -e '/\[ICA 3.0\]/a\GenericUSB=on' "${pkgdir}$ICAROOT/config/module.ini"
+    echo "[GenericUSB]" >> "${pkgdir}$ICAROOT/config/module.ini"
+    echo "DriverName=VDGUSB.DLL" >> "${pkgdir}$ICAROOT/config/module.ini"
+
     cd "${srcdir}"
     # install freedesktop.org files
     install -Dm644 -t "$pkgdir"/usr/share/applications citrix-{configmgr,conncenter,workspace,wfica}.desktop
